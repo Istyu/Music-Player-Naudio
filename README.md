@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="MusicPlayer.jpg?raw=true" />
+</p>
+
+## Music Player Naudio
 This is a music player with 10 channel equalizer. 
 With the EQ can be controlled the Gain and Bandwidth. 
 There is an option saving the EQ settings and playlist. 
