@@ -30,12 +30,18 @@ There is option controlling the pan.
 - Log in with your Discord account.
 - Click on **New Application**, then enter the application's name (e.g., Music Player) and icon.
 - In the left menu, go to the **Rich Presence** section and fill in the required details (icon, description, etc.).
+<p align="center">
+  <img src="DiscordRPC1.png?raw=true" />
+</p>
 
 2. Obtain the application's Client ID
 
 - After creating the application, go to the **General Information** page and copy the Application (Client) ID. You will need this for configuring the music player application.
 - Add the generated Client ID to the Discord.txt file in the following format: `DiscordClientID:[your_discord_client_id]`
 E.g.: `DiscordClientID:1234567891011121314`
+<p align="center">
+  <img src="DiscordRPC2.png?raw=true" />
+</p>
 
 ### Form Close
 
