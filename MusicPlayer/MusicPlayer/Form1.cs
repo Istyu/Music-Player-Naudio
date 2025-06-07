@@ -18,6 +18,8 @@ using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using TagLib;
 using System.Runtime.InteropServices;
+using DiscordRPC;
+using DiscordRPC.Logging;
 
 namespace MusicPlayer
 {
@@ -28,8 +30,8 @@ namespace MusicPlayer
 
         //private NAudio.Wave.BlockAlignReductionStream stream = null;
         //private NAudio.Wave.DirectSoundOut output = null;
-        private NAu.Wave.WaveOutEvent? output /*= null*/; // With this possible the sound volume controlling
-        private NAudio.Wave.WaveStream? pcm /*= null*/;
+        private NAu.Wave.WaveOutEvent? output; // With this possible the sound volume controlling
+        private NAudio.Wave.WaveStream? pcm;
         private List<string> songPaths = new List<string>();
         private List<string> SfileName = new List<string>();
 
@@ -42,12 +44,6 @@ namespace MusicPlayer
         public float[] bwValues;
         public float[] bwScrollValues;
 
-        // Thread definitions
-        //    Thread thread;
-        //    public bool threadStarted;
-        //    Thread timeScrollThread;
-        //    public bool scrollThreadStarted;
-
         public bool decrementVol = false;
         public bool incrementVol = false;
         public bool stopped = false;
@@ -55,7 +51,18 @@ namespace MusicPlayer
         //public bool audioFileLoaded;
         public bool autoSkip = false;
 
+        const string closeMessage = "Are you sure that you would like to close the form? \nUnsaved settings may be lost.";
+        const string closeCaption = "Music Player Closing";
+
         private const string LyricsApiUrl = "http://www.azlyrics.com/lyrics/";
+
+        private DiscordRpcClient client;
+
+        private string DCtitle = "";
+        private string DCartist = "";
+        private DateTime now;
+
+        private string DCappClientID;
 
         public Form1()
         {
@@ -71,14 +78,6 @@ namespace MusicPlayer
             bwValues = new float[10];
             bwScrollValues = new float[10];
 
-            //    thread = new Thread(ThreadFunc);
-            //    thread.IsBackground = true;
-            //    threadStarted = false;
-
-            //    timeScrollThread = new Thread(timeScrollFunc);
-            //    timeScrollThread.IsBackground = true;
-            //    scrollThreadStarted = false;
-
             //audioFileLoaded = false;
             //currentVol = 1.0f;
 
@@ -92,6 +91,9 @@ namespace MusicPlayer
 
             string playList = "myPlaylist.txt";
             string listPath = Path.Combine(executablePath, playList);
+
+            string DCID = "Discord.txt";
+            string DCpath = Path.Combine(executablePath, DCID);
 
             if (!System.IO.File.Exists(filePath))
             {
@@ -110,10 +112,108 @@ namespace MusicPlayer
 
             if (System.IO.File.Exists(listPath))
                 LoadSavedSongs();
+
+
+            try
+            {
+                using( StreamReader sr = new StreamReader( DCpath ) )
+                {
+                    while( !sr.EndOfStream )
+                    {
+                        string line = sr.ReadLine();
+                        if( !string.IsNullOrEmpty( line ) )
+                        {
+                            if( line.StartsWith( "DiscordClientID:" ) )
+                                DCappClientID = line.Substring(16);
+                        }
+                    }
+                }
+            }
+            catch( Exception ex )
+            {
+                MessageBox.Show($"Error occurred during load DiscordID: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+
+            /*
+            Create a Discord client
+            NOTE:   If you are using Unity3D, you must use the full constructor and define
+                     the pipe connection.
+            */
+            client = new DiscordRpcClient(DCappClientID);       
+            
+            //Set the logger
+            client.Logger = new ConsoleLogger() { Level = LogLevel.Warning };
+        
+            //Subscribe to events
+            client.OnReady += (sender, e) =>
+            {
+                Console.WriteLine("Received Ready from user {0}", e.User.Username);
+            };
+                
+            client.OnPresenceUpdate += (sender, e) =>
+            {
+                Console.WriteLine("Received Update! {0}", e.Presence);
+            };
+            
+            //Connect to the RPC
+            client.Initialize();
+        
+            //Set the rich presence
+            //Call this as many times as you want and anywhere in your code.
+            client.SetPresence(new RichPresence()
+            {
+                Details = "Song",
+                State = "No song playing",
+                Timestamps = Timestamps.Now,
+                Type = ActivityType.Listening,
+                Assets = new Assets()
+                {
+                    LargeImageKey = "musical_note",
+                    LargeImageText = "Music Player",
+                    SmallImageKey = "musical_note",
+                    SmallImageText = "Enjoying great tunes"
+                }
+            });
+        }
+
+        private void exit_Click(object sender, EventArgs e)
+        {
+            this.Close(); // Notify the OnFormClosing() event handler
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            bool close = true;
+            var result = MessageBox.Show(closeMessage, closeCaption,
+                                 MessageBoxButtons.YesNo,
+                                 MessageBoxIcon.Exclamation);
+
+            // If the no button was pressed ...
+            if( result == DialogResult.No )
+            {
+                // cancel the closure of the form.
+                e.Cancel = true;
+                close = false;
+            }
+            if( close )
+            {
+                client.Dispose();
+                try
+                {
+                    DisposeWave(true);
+                    Environment.Exit(0); // Application.Exit(); if there are more forms
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"An error occurred while exiting: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            base.OnFormClosing(e);
         }
 
         private void timer1_Tick(object sender, EventArgs e)
         {
+            client.Invoke();
             if (output != null)
             {
                 horzRollingLabel.Left -= 2;
@@ -131,6 +231,31 @@ namespace MusicPlayer
                 int seconds = (int)totalSeconds;
                 customPBarPos.Value = seconds;
                 customPBarPos.CurrentDuration = seconds;
+
+                /*double totalMinutes = this.pcm.CurrentTime.TotalMinutes;
+                int minutes = (int)totalMinutes;
+
+                TimeSpan durMinutes = this.pcm.TotalTime;
+
+                client.SetPresence(new RichPresence()
+                {
+                    Details = DCtitle,
+                    State = DCartist,
+                    Type = ActivityType.Listening,
+                    Assets = new Assets()
+                    {
+                        LargeImageKey = "musical_note",
+                        LargeImageText = String.Format("{0:00}:{1:00} / {2:00}:{3:00}", (int)durMinutes.TotalMinutes, (int)durMinutes.TotalSeconds % 60, minutes, seconds % 60),
+                        SmallImageKey = "musical_note",
+                        SmallImageText = "Enjoying great tunes"
+                    }
+                });*/
+            }
+
+            if( output != null && output.PlaybackState != NAudio.Wave.PlaybackState.Playing )
+            {
+                volumeMeter1.Amplitude = 0.0f;
+                volumeMeter2.Amplitude = 0.0f;
             }
 
             if ( ( output != null && pcm != null && pcm.CurrentTime >= pcm.TotalTime ) && 
@@ -237,6 +362,8 @@ namespace MusicPlayer
                     musicList.Items[nextIndex].Selected = true;
                     selectSong(nextIndex);
                     output.Play();
+
+                    updateDiscordRPC_Playing();
                 }
             }
         }
@@ -252,6 +379,8 @@ namespace MusicPlayer
                     musicList.Items[prevIndex].Selected = true;
                     selectSong(prevIndex);
                     output.Play();
+
+                    updateDiscordRPC_Playing();
                 }
             }
         }
@@ -486,7 +615,7 @@ namespace MusicPlayer
                 //foreach( string fileName in files )
                 //    SfileName.Add(System.IO.Path.GetFileName(fileName));
 
-                SaveSongsToFile(); // Mentjük a zenéket a fájlba
+                SaveSongsToFile(); // Save songs in the file.
             }
         }
 
@@ -507,7 +636,7 @@ namespace MusicPlayer
             }
             else
             {
-                MessageBox.Show("Please enter the name of the artist and the track!");
+                MessageBox.Show($"Please enter the name of the artist and the track!", "Addinfo", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
@@ -519,7 +648,7 @@ namespace MusicPlayer
             string artistLower = lowerLettersForArtist(artist);
 
             // Remove words
-            string[] wordsToRemove = { "feat", "ft", "official", "audio", "video", "remix", "mix", "original", "lyrics", artistLower }; // Az eltávolítandó szavak listája
+            string[] wordsToRemove = { "feat", "ft", "official", "audio", "video", "remix", "mix", "original", "lyrics", artistLower }; // List of words to remove
             string[] words = cleanedInput.Split(' ');
             string filteredWords = string.Join(" ", words.Where(word => !wordsToRemove.Contains(word.ToLower())));
 
@@ -565,17 +694,37 @@ namespace MusicPlayer
                 string artist = file.Tag.FirstPerformer; // Artist
                 int bitrate = (int)file.Properties.AudioBitrate; // Bitrate
                 string bitrateStr = bitrate.ToString();
-                IPicture[] pictures = file.Tag.Pictures; // Cover
+                //IPicture[] pictures = file.Tag.Pictures; // Cover
+                IPicture[] pictures = null;
+                try
+                {
+                    pictures = file.Tag.Pictures;
+                }
+                catch( Exception ex )
+                {
+                    // In case of error, we set default values
+                    MessageBox.Show($"An error occurred while reading the file: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    coverBox.Image = coverBox.InitialImage; // Default picture
+                }
+                finally
+                {
+                    file?.Dispose(); // Free up resources
+                }
 
-                if (pictures.Length > 0)
+                if (pictures != null && pictures.Length > 0)
                 {
                     IPicture picture = pictures[0];
                     using (MemoryStream memoryStream = new MemoryStream(picture.Data.Data))
                     {
-                        Image albumArtImage = Image.FromStream(memoryStream);
-                        // Scaling the albumArtImage to the size of coverBox
-                        albumArtImage = ResizeImage(albumArtImage, coverBox.Width, coverBox.Height);
-                        coverBox.Image = albumArtImage;
+                        try
+                        {
+                            Image albumArtImage = Image.FromStream(memoryStream);
+                            // Scaling the albumArtImage to the size of coverBox
+                            albumArtImage = ResizeImage(albumArtImage, coverBox.Width, coverBox.Height);
+                            coverBox.Image = albumArtImage;
+                        }
+                        catch
+                        {coverBox.Image = coverBox.InitialImage;}
                     }
                 }
                 else
@@ -600,12 +749,11 @@ namespace MusicPlayer
                 }
                 else
                 {
-                    MessageBox.Show("Kérlek add meg az előadó és a zeneszám címét!");
+                    MessageBox.Show("Please provide the artist and song title!");
                 }*/
 
                 //audioFileLoaded = true;
-                bool pcmDisp = false;
-                DisposeWave(pcmDisp);
+                DisposeWave(false);
                 resetBandBars();
                 //string selectedFileName = open.SafeFileName;
                 stopped = false;
@@ -691,9 +839,47 @@ namespace MusicPlayer
                 string fileExtension = System.IO.Path.GetExtension(SfileName[index]);
 
                 if (fileExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase))
-                    this.pcm = NAudio.Wave.WaveFormatConversionStream.CreatePcmStream(new NAudio.Wave.Mp3FileReader(songPaths[index]));
+                {
+                    try
+                    {
+                        var mp3PcmStream = NAudio.Wave.WaveFormatConversionStream.CreatePcmStream(new NAudio.Wave.Mp3FileReader(songPaths[index]));
+                    //    var mp3PcmStream = NAudio.Wave.WaveFormatConversionStream.CreatePcmStream(new NAu.Wave.Mp3FileReader(songPaths[index]));
+                        // Resampling if the sample rate is not 44100 Hz and 48000 Hz
+                        if( mp3PcmStream.WaveFormat.SampleRate != 44100 && mp3PcmStream.WaveFormat.SampleRate != 48000 )
+                        {
+                            var targetFormat = new WaveFormat(44100, 16, mp3PcmStream.WaveFormat.Channels);
+                            this.pcm = new WaveFormatConversionStream(targetFormat, mp3PcmStream);
+                        }
+                        else
+                        {
+                            this.pcm = mp3PcmStream;
+                        }
+                    }
+                    catch( Exception ex )
+                    {
+                        MessageBox.Show($"Mp3FileReader error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                }
                 else if (fileExtension.Equals(".wav", StringComparison.OrdinalIgnoreCase))
-                    this.pcm = NAudio.Wave.WaveFormatConversionStream.CreatePcmStream(new NAudio.Wave.WaveFileReader(songPaths[index]));
+                {
+                    try
+                    {
+                        var wavPcmStream = NAudio.Wave.WaveFormatConversionStream.CreatePcmStream(new NAudio.Wave.WaveFileReader(songPaths[index]));
+                        if( wavPcmStream.WaveFormat.SampleRate != 44100 && wavPcmStream.WaveFormat.SampleRate != 48000 )
+                        {
+                            var targetFormat = new WaveFormat(44100, 16, wavPcmStream.WaveFormat.Channels);
+                            this.pcm = new WaveFormatConversionStream(targetFormat, wavPcmStream);
+                        }
+                        else
+                        {
+                            this.pcm = wavPcmStream;
+                        }
+                    }
+                    catch( Exception ex )
+                    {
+                        MessageBox.Show($"WaveFileReader error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                }
 
                 WaveChannel32 waveChannel = new WaveChannel32(pcm);
                 var sampleChannel = new SampleChannel(waveChannel);
@@ -728,7 +914,15 @@ namespace MusicPlayer
                 setVolumeDelegate = vol => sampleChannel.Volume = vol;
                 postVolumeMeter = new MeteringSampleProvider(equalizer);
                 postVolumeMeter.StreamVolume += OnPostVolumeMeter;
-                output.Init(postVolumeMeter);
+                //output.Init(postVolumeMeter);
+                try
+                {
+                    output.Init(postVolumeMeter);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"WaveOut initialization error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
                 setVolumeDelegate(volumeSlider1.Volume);
 
                 customPBarPos.TotalDuration = seconds;
@@ -742,6 +936,28 @@ namespace MusicPlayer
                 /*pauseButton.Visible = false;
                 Play.Visible = true;*/
                 autoSkip = false;
+
+                /// <summary>
+                /// - Debug -
+                /// Sample rate, Channels and bit depth informations about music file
+                /// </summary>
+                //MessageBox.Show($"PCM Sample Rate: {pcm.WaveFormat.SampleRate}", "Debug", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                //MessageBox.Show($"PCM Channels: {pcm.WaveFormat.Channels}", "Debug", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                //MessageBox.Show($"PCM Bits Per Sample: {pcm.WaveFormat.BitsPerSample}", "Debug", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+
+                if( !string.IsNullOrEmpty(title) || !string.IsNullOrEmpty(artist) )
+                {
+                    DCtitle = title;
+                    DCartist = artist;
+                }
+                else
+                {
+                    DCtitle = SfileName[index];
+                    DCartist = "";
+                }
+
+                updateDiscordRPC_Stop();
             }
         }
         void OnPostVolumeMeter(object sender, StreamVolumeEventArgs e)
@@ -829,6 +1045,8 @@ namespace MusicPlayer
                 stopped = false;
                 pauseButton.Visible = true;
                 Play.Visible = false;
+
+                updateDiscordRPC_Playing();
             }
         }
 
@@ -848,6 +1066,8 @@ namespace MusicPlayer
 
                 pauseButton.Visible = false;
                 Play.Visible = true;
+
+                updateDiscordRPC_Stop();
             }
         }
 
@@ -857,11 +1077,14 @@ namespace MusicPlayer
             await Task.Run(() =>
             {
                 //setVolumeDelegate?.Invoke(0.0f);
+                Task.Delay(1).Wait();
                 output.Play();
-                for (float i = 0.0f; i <= volumeSlider1.Volume; i += (volumeSlider1.Volume / 100.0f))
+                for (float i = 0.0f; i <= volumeSlider1.Volume; i += (volumeSlider1.Volume / 200.0f))
                 {
                     setVolumeDelegate?.Invoke(i);
-                    Task.Delay(4).Wait();
+                    int delay = (int)(1 + 3 * Math.Pow(1 - (i / volumeSlider1.Volume), 2)); // 1-3 ms
+                    Task.Delay(delay).Wait();
+                    //Task.Delay(1).Wait();
                 }
             });
         }
@@ -870,10 +1093,14 @@ namespace MusicPlayer
         {
             await Task.Run(() =>
             {
-                for (float i = volumeSlider1.Volume; i >= 0.0f; i -= (volumeSlider1.Volume / 100.0f))
+                for (float i = volumeSlider1.Volume; i >= 0.0f; i -= (volumeSlider1.Volume / 200.0f))
                 {
                     setVolumeDelegate?.Invoke(i);
-                    Task.Delay(4).Wait();
+                    //int delay = (int)(1 + 5 * (i / volumeSlider1.Volume)); // 1-5 ms
+                    //int delay = (int)(1 + Math.Log(1 + i) * 5); // 1-5 ms, logaritmikus
+                    int delay = (int)(1 + 3 * Math.Pow(i / volumeSlider1.Volume, 2)); // 1-3 ms
+                    Task.Delay(delay).Wait();
+                    //Task.Delay(1).Wait();
                 }
                 output.Pause();
             });
@@ -884,10 +1111,14 @@ namespace MusicPlayer
             if (output != null)
             {
                 stopped = true;
+                incrementVol = false;
+                decrementVol = false;
                 customPBarPos.Value = 0;
                 customPBarPos.CurrentDuration = 0;
                 this.pcm.CurrentTime = new TimeSpan(0);
                 output.Stop();
+
+                updateDiscordRPC_Stop();
 
                 pauseButton.Visible = false;
                 Play.Visible = true;
@@ -902,7 +1133,7 @@ namespace MusicPlayer
             popupForm.Size = new Size(450, 200);
             popupForm.StartPosition = FormStartPosition.CenterParent;
 
-            Button buttonYes = new Button();
+            System.Windows.Forms.Button buttonYes = new System.Windows.Forms.Button();
             buttonYes.Text = "Yes";
             buttonYes.Location = new Point(60, 60);
             buttonYes.Click += (sender, e) =>
@@ -912,7 +1143,7 @@ namespace MusicPlayer
             };
             popupForm.Controls.Add(buttonYes);
 
-            Button buttonNo = new Button();
+            System.Windows.Forms.Button buttonNo = new System.Windows.Forms.Button();
             buttonNo.Text = "No";
             buttonNo.Location = new Point(295, 60);
             buttonNo.Click += (sender, e) =>
@@ -941,8 +1172,7 @@ namespace MusicPlayer
                 pauseButton.Visible = false;
                 Play.Visible = true;
                 Stop.Enabled = false;
-                bool pcmDisp = false;
-                DisposeWave(pcmDisp);
+                DisposeWave(false);
             }
             ClearPlaylist();
         }
@@ -955,7 +1185,7 @@ namespace MusicPlayer
             popupForm.Size = new Size(350, 200);
             popupForm.StartPosition = FormStartPosition.CenterParent;
 
-            Button buttonYes = new Button();
+            System.Windows.Forms.Button buttonYes = new System.Windows.Forms.Button();
             buttonYes.Text = "Yes";
             buttonYes.Location = new Point(60, 60);
             buttonYes.Click += (sender, e) =>
@@ -965,7 +1195,7 @@ namespace MusicPlayer
             };
             popupForm.Controls.Add(buttonYes);
 
-            Button buttonNo = new Button();
+            System.Windows.Forms.Button buttonNo = new System.Windows.Forms.Button();
             buttonNo.Text = "No";
             buttonNo.Location = new Point(195, 60);
             buttonNo.Click += (sender, e) =>
@@ -990,7 +1220,7 @@ namespace MusicPlayer
             popupForm.Size = new Size(350, 200);
             popupForm.StartPosition = FormStartPosition.CenterParent;
 
-            Button buttonYes = new Button();
+            System.Windows.Forms.Button buttonYes = new System.Windows.Forms.Button();
             buttonYes.Text = "Yes";
             buttonYes.Location = new Point(60, 60);
             buttonYes.Click += (sender, e) =>
@@ -1000,7 +1230,7 @@ namespace MusicPlayer
             };
             popupForm.Controls.Add(buttonYes);
 
-            Button buttonNo = new Button();
+            System.Windows.Forms.Button buttonNo = new System.Windows.Forms.Button();
             buttonNo.Text = "No";
             buttonNo.Location = new Point(195, 60);
             buttonNo.Click += (sender, e) =>
@@ -1014,7 +1244,7 @@ namespace MusicPlayer
             if (!saveEq)
                 return;
 
-            StreamWriter? Write /*= null*/;
+            StreamWriter? Write;
 
             Write = new StreamWriter("eqsettings.txt");
             Write.WriteLine("eq1Value=" + eqValues[0].ToString());
@@ -1061,20 +1291,6 @@ namespace MusicPlayer
             Write.Close();
         }
 
-        private void exit_Click(object sender, EventArgs e)
-        {
-            bool pcmDisp = true;
-            try
-            {
-                DisposeWave(pcmDisp);
-                this.Close();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("An error occurred while exiting: " + ex.Message);
-            }
-        }
-
         private void customPBarPos_ValueChanged(object sender, EventArgs e)
         {
             /*if (output != null)
@@ -1104,9 +1320,72 @@ namespace MusicPlayer
                 output.Pause();
                 this.pcm.CurrentTime = TimeSpan.FromSeconds(customPBarPos.Value);
                 output.Play();
+
+                updateDiscordRPC_Playing();
             }
             else
+            {
                 this.pcm.CurrentTime = TimeSpan.FromSeconds(customPBarPos.Value);
+
+                updateDiscordRPC_Stop();
+            }
+        }
+
+        private void updateDiscordRPC_Playing()
+        {
+            // Calculate the current UTC time and start time
+            double currSeconds = this.pcm.CurrentTime.TotalSeconds;
+            int sec = (int)currSeconds;
+            now = DateTime.UtcNow;
+            var startTime = now - TimeSpan.FromSeconds(sec); // Start playback
+
+            TimeSpan durMinutes = this.pcm.TotalTime;
+
+            client.SetPresence(new RichPresence()
+            {
+                Details = DCtitle, // Song title
+                State = DCartist, // Status, such as "Playing music"
+                //Timestamps = Timestamps.Now,
+                Type = ActivityType.Listening,
+                Timestamps = new Timestamps
+                {
+                    Start = startTime, // Playback start time
+                    End = now + TimeSpan.FromSeconds(this.pcm.TotalTime.TotalSeconds - currSeconds) // End of playback
+                },
+                Assets = new Assets()
+                {
+                    LargeImageKey = "musical_note",
+                    //LargeImageText = String.Format("Duration: {0:00}:{1:00}", (int)duration.TotalMinutes, duration.Seconds),
+                    LargeImageText = String.Format("{0:00}:{1:00}", (int)durMinutes.TotalMinutes, (int)durMinutes.TotalSeconds % 60),
+                    SmallImageKey = "musical_note",
+                    SmallImageText = "Enjoying great tunes"
+                }
+            });
+        }
+
+        private void updateDiscordRPC_Stop()
+        {
+            TimeSpan durMinutes = this.pcm.TotalTime;
+            var StopTime = new DateTime(2000, 1, 1, 1, 1, 0);
+            
+            client.SetPresence(new RichPresence()
+            {
+                Details = DCtitle, // Song title
+                State = DCartist, // Status, such as "Playing music"
+                Type = ActivityType.Listening,
+                Timestamps = new Timestamps
+                {
+                    Start = StopTime, // Playback start time
+                    End = StopTime // End of playback
+                },
+                Assets = new Assets()
+                {
+                    LargeImageKey = "musical_note",
+                    LargeImageText = String.Format("{0:00}:{1:00}", (int)durMinutes.TotalMinutes, (int)durMinutes.TotalSeconds % 60),
+                    SmallImageKey = "musical_note",
+                    SmallImageText = "Enjoying great tunes"
+                }
+            });
         }
 
         private void band1CustomBar_ValueChanged(object sender, EventArgs e)
@@ -1385,7 +1664,7 @@ namespace MusicPlayer
 
         private void eqSettingsFirstTime()
         {
-            StreamWriter? Write /*= null*/;
+            StreamWriter? Write;
 
             Write = new StreamWriter("eqsettings.txt");
             Write.WriteLine("eq1Value=0");
@@ -1813,54 +2092,68 @@ namespace MusicPlayer
         { hintLbl.Text = ""; }
 
         /*
-       void timeScrollFunc()
-       {
-           scrollThreadStarted = true;
-           while( scrollThreadStarted )
-           {
-               Thread.Sleep(50);
-               if( !stopped )
-               {
-                   string currTime = this.pcm.CurrentTime.ToString();
-                   double totalSeconds = this.pcm.CurrentTime.TotalSeconds;
-                   int seconds = (int)totalSeconds;
-                   positionBar.Value = seconds;
-               }
-           }
-       }
-*/
-        /*
-                void ThreadFunc()
+        void ThreadFunc()
+        {
+            threadStarted = true;
+            while( threadStarted )
+            {
+                if( decrementVol )
                 {
-                    threadStarted = true;
-                    while( threadStarted )
+                    for( float i = currentVol; i > 0.0f; i-= 0.1f )
                     {
-                        if( decrementVol )
-                        {
-                            for( float i = currentVol; i > 0.0f; i-= 0.1f )
-                            {
-                                output.Volume = i;
-                                Thread.Sleep(50);
-                            }
-                            output.Pause();
-                            decrementVol = false;
-                        }
-                        if( incrementVol )
-                        {
-                            output.Play();
-                            output.Volume = 0.0f;
-                            for( float i = 0.0f; i <= currentVol; i+= 0.1f )
-                            {
-                                output.Volume = i;
-                                Thread.Sleep(50);
-                            }
-                            incrementVol = false;
-                        }
+                        output.Volume = i;
+                        Thread.Sleep(50);
                     }
-                }*/
+                    output.Pause();
+                    decrementVol = false;
+                }
+                if( incrementVol )
+                {
+                    output.Play();
+                    output.Volume = 0.0f;
+                    for( float i = 0.0f; i <= currentVol; i+= 0.1f )
+                    {
+                        output.Volume = i;
+                        Thread.Sleep(50);
+                    }
+                    incrementVol = false;
+                }
+            }
+        }*/
     }
 }
-
+/*
+namespace NAudio.Addition
+{
+    public class WaveProviderToWaveStream : WaveStream
+    {
+        private readonly IWaveProvider sourceProvider;
+        private long position;
+    
+        public WaveProviderToWaveStream(IWaveProvider sourceProvider)
+        {
+            this.sourceProvider = sourceProvider;
+        }
+    
+        public override WaveFormat WaveFormat => sourceProvider.WaveFormat;
+    
+        public override long Length => long.MaxValue; // Az IWaveProvider esetében nincs hossz
+    
+        public override long Position
+        {
+            get => position;
+            set => throw new NotSupportedException("Setting position is not supported.");
+        }
+    
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            int bytesRead = sourceProvider.Read(buffer, offset, count);
+            position += bytesRead;
+            return bytesRead;
+        }
+    }
+}
+*/
 namespace NAudio.Extras
 {
     /// <summary>
@@ -2459,4 +2752,524 @@ namespace NAu.Wave
             }
         }
     }
+/*
+    /// <summary>
+    /// Class for reading from MP3 files
+    /// </summary>
+    public class Mp3FileReader : Mp3FileReaderBase
+    {
+        /// <summary>Supports opening a MP3 file</summary>
+        public Mp3FileReader(string mp3FileName)
+            : base(System.IO.File.OpenRead(mp3FileName), CreateAcmFrameDecompressor, true)
+        {
+        }
+
+        /// <summary>
+        /// Opens MP3 from a stream rather than a file
+        /// Will not dispose of this stream itself
+        /// </summary>
+        /// <param name="inputStream">The incoming stream containing MP3 data</param>
+        public Mp3FileReader(Stream inputStream)
+            : base(inputStream, CreateAcmFrameDecompressor, false)
+        {
+
+        }
+
+        /// <summary>
+        /// Creates an ACM MP3 Frame decompressor. This is the default with NAudio
+        /// </summary>
+        /// <param name="mp3Format">A WaveFormat object based </param>
+        /// <returns></returns>
+        public static IMp3FrameDecompressor CreateAcmFrameDecompressor(WaveFormat mp3Format)
+        {
+            // new DmoMp3FrameDecompressor(this.Mp3WaveFormat); 
+            return new AcmMp3FrameDecompressor(mp3Format);
+        }
+    }
+
+    class Mp3Index
+    {
+        public long FilePosition { get; set; }
+        public long SamplePosition { get; set; }
+        public int SampleCount { get; set; }
+        public int ByteCount { get; set; }
+    }
+
+    /// <summary>
+    /// Class for reading from MP3 files
+    /// </summary>
+    public class Mp3FileReaderBase : WaveStream
+    {
+        private WaveFormat waveFormat; // Nem readonly
+        private int bytesPerSample;    // Nem readonly
+        private int bytesPerDecodedFrame;
+        private byte[] decompressBuffer;
+        private readonly FrameDecompressorBuilder frameDecompressorBuilder; // Új mező
+
+//        private readonly WaveFormat waveFormat;
+        private Stream mp3Stream;
+        private readonly long mp3DataLength;
+        private readonly long dataStartPosition;
+        
+        /// <summary>
+        /// The MP3 wave format (n.b. NOT the output format of this stream - see the WaveFormat property)
+        /// </summary>
+        public Mp3WaveFormat Mp3WaveFormat { get; private set; }
+
+        private readonly XingHeader xingHeader;
+        private readonly bool ownInputStream;
+
+        private List<Mp3Index> tableOfContents;
+        private int tocIndex;
+
+        private long totalSamples;
+//        private readonly int bytesPerSample;
+//        private readonly int bytesPerDecodedFrame;
+
+        private IMp3FrameDecompressor decompressor;
+        
+//        private readonly byte[] decompressBuffer;
+        private int decompressBufferOffset;
+        private int decompressLeftovers;
+        private bool repositionedFlag;
+
+        private long position; // decompressed data position tracker
+
+        private readonly object repositionLock = new object();
+
+
+        /// <summary>Supports opening a MP3 file</summary>
+        /// <param name="mp3FileName">MP3 File name</param>
+        /// <param name="frameDecompressorBuilder">Factory method to build a frame decompressor</param>
+        public Mp3FileReaderBase(string mp3FileName, FrameDecompressorBuilder frameDecompressorBuilder)
+            : this(System.IO.File.OpenRead(mp3FileName), frameDecompressorBuilder, true)
+        {
+        }
+
+
+
+        /// <summary>
+        /// Opens MP3 from a stream rather than a file
+        /// Will not dispose of this stream itself
+        /// </summary>
+        /// <param name="inputStream">The incoming stream containing MP3 data</param>
+        /// <param name="frameDecompressorBuilder">Factory method to build a frame decompressor</param>
+        public Mp3FileReaderBase(Stream inputStream, FrameDecompressorBuilder frameDecompressorBuilder)
+            : this(inputStream, frameDecompressorBuilder, false)
+        {
+            
+        }
+
+        protected Mp3FileReaderBase(Stream inputStream, FrameDecompressorBuilder frameDecompressorBuilder, bool ownInputStream)
+        {
+            if (inputStream == null) throw new ArgumentNullException(nameof(inputStream));
+            if (frameDecompressorBuilder == null) throw new ArgumentNullException(nameof(frameDecompressorBuilder));
+            this.ownInputStream = ownInputStream;
+            try
+            {
+                mp3Stream = inputStream;
+                Id3v2Tag = Id3v2Tag.ReadTag(mp3Stream);
+
+                dataStartPosition = mp3Stream.Position;
+                var firstFrame = Mp3Frame.LoadFromStream(mp3Stream);
+                if (firstFrame == null)
+                    throw new InvalidDataException("Invalid MP3 file - no MP3 Frames Detected");
+                double bitRate = firstFrame.BitRate;
+                xingHeader = XingHeader.LoadXingHeader(firstFrame);
+                // If the header exists, we can skip over it when decoding the rest of the file
+                if (xingHeader != null) dataStartPosition = mp3Stream.Position;
+
+                // workaround for a longstanding issue with some files failing to load
+                // because they report a spurious sample rate change
+                var secondFrame = Mp3Frame.LoadFromStream(mp3Stream);
+                if (secondFrame != null &&
+                    (secondFrame.SampleRate != firstFrame.SampleRate ||
+                     secondFrame.ChannelMode != firstFrame.ChannelMode))
+                {
+                    // assume that the first frame was some kind of VBR/LAME header that we failed to recognise properly
+                    dataStartPosition = secondFrame.FileOffset;
+                    // forget about the first frame, the second one is the first one we really care about
+                    firstFrame = secondFrame;
+                }
+
+                mp3DataLength = mp3Stream.Length - dataStartPosition;
+
+                // try for an ID3v1 tag as well
+                mp3Stream.Position = mp3Stream.Length - 128;
+                byte[] tag = new byte[128];
+                mp3Stream.Read(tag, 0, 128);
+                if (tag[0] == 'T' && tag[1] == 'A' && tag[2] == 'G')
+                {
+                    Id3v1Tag = tag;
+                    mp3DataLength -= 128;
+                }
+
+                mp3Stream.Position = dataStartPosition;
+
+                // create a temporary MP3 format before we know the real bitrate
+                Mp3WaveFormat = new Mp3WaveFormat(firstFrame.SampleRate,
+                    firstFrame.ChannelMode == ChannelMode.Mono ? 1 : 2, firstFrame.FrameLength, (int) bitRate);
+
+                CreateTableOfContents();
+                tocIndex = 0;
+
+                // [Bit rate in Kilobits/sec] = [Length in kbits] / [time in seconds] 
+                //                            = [Length in bits ] / [time in milliseconds]
+
+                // Note: in audio, 1 kilobit = 1000 bits.
+                // Calculated as a double to minimize rounding errors
+                bitRate = (mp3DataLength*8.0/TotalSeconds());
+
+                mp3Stream.Position = dataStartPosition;
+
+                // now we know the real bitrate we can create an accurate MP3 WaveFormat
+                Mp3WaveFormat = new Mp3WaveFormat(firstFrame.SampleRate,
+                    firstFrame.ChannelMode == ChannelMode.Mono ? 1 : 2, firstFrame.FrameLength, (int) bitRate);
+                decompressor = frameDecompressorBuilder(Mp3WaveFormat);
+                this.waveFormat = decompressor.OutputFormat;
+                this.bytesPerSample = (decompressor.OutputFormat.BitsPerSample)/8*decompressor.OutputFormat.Channels;
+                // no MP3 frames have more than 1152 samples in them
+                this.bytesPerDecodedFrame = 1152 * bytesPerSample;
+                // some MP3s I seem to get double
+                this.decompressBuffer = new byte[bytesPerDecodedFrame * 2];
+            }
+            catch (Exception)
+            {
+                if (ownInputStream) inputStream.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Function that can create an MP3 Frame decompressor
+        /// </summary>
+        /// <param name="mp3Format">A WaveFormat object describing the MP3 file format</param>
+        /// <returns>An MP3 Frame decompressor</returns>
+        public delegate IMp3FrameDecompressor FrameDecompressorBuilder(WaveFormat mp3Format);
+
+        private void CreateTableOfContents()
+        {
+            try
+            {
+                // Just a guess at how many entries we'll need so the internal array need not resize very much
+                // 400 bytes per frame is probably a good enough approximation.
+                tableOfContents = new List<Mp3Index>((int)(mp3DataLength / 400));
+                Mp3Frame frame;
+                do
+                {
+                    var index = new Mp3Index();
+                    index.FilePosition = mp3Stream.Position;
+                    index.SamplePosition = totalSamples;
+                    frame = ReadNextFrame(false);
+                    if (frame != null)
+                    {
+                        ReFrameFormat(frame);
+                        ValidateFrameFormat(frame);
+
+                        totalSamples += frame.SampleCount;
+                        index.SampleCount = frame.SampleCount;
+                        index.ByteCount = (int)(mp3Stream.Position - index.FilePosition);
+                        tableOfContents.Add(index);
+                    }
+                } while (frame != null);
+            }
+            catch (EndOfStreamException)
+            {
+                // not necessarily a problem
+            }
+        }
+
+        private void ValidateFrameFormat(Mp3Frame frame)
+        {
+            if (frame.SampleRate != Mp3WaveFormat.SampleRate)
+            {
+                string message =
+                    String.Format(
+                        "Got a frame at sample rate {0}, in an MP3 with sample rate {1}. Mp3FileReader does not support sample rate changes.",
+                        frame.SampleRate, Mp3WaveFormat.SampleRate);
+                throw new InvalidOperationException(message);
+            }
+            int channels = frame.ChannelMode == ChannelMode.Mono ? 1 : 2;
+            if (channels != Mp3WaveFormat.Channels)
+            {
+                string message =
+                    String.Format(
+                        "Got a frame with channel mode {0}, in an MP3 with {1} channels. Mp3FileReader does not support changes to channel count.",
+                        frame.ChannelMode, Mp3WaveFormat.Channels);
+                throw new InvalidOperationException(message);
+            }
+        }
+
+        private void ReFrameFormat(Mp3Frame frame)
+        {
+            if (frame.SampleRate != Mp3WaveFormat.SampleRate)
+            {
+                int newChannels = frame.ChannelMode == ChannelMode.Mono ? 1 : 2;
+                if (frame.SampleRate != decompressor.OutputFormat.SampleRate ||
+                    newChannels != decompressor.OutputFormat.Channels)
+                {
+                    // Új decompressort hozunk létre
+                    if (decompressor != null)
+                    {
+                        decompressor.Dispose();
+                        decompressor = null;
+                    }
+                    Mp3WaveFormat = new Mp3WaveFormat(frame.SampleRate, newChannels, frame.FrameLength, frame.BitRate);
+                    decompressor = frameDecompressorBuilder(Mp3WaveFormat);
+                    this.waveFormat = decompressor.OutputFormat;
+                    this.bytesPerSample = waveFormat.BitsPerSample / 8 * waveFormat.Channels;
+                    // no MP3 frames have more than 1152 samples in them
+                    this.bytesPerDecodedFrame = 1152 * bytesPerSample;
+                    // some MP3s I seem to get double
+                    this.decompressBuffer = new byte[bytesPerDecodedFrame * 2];
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets the total length of this file in milliseconds.
+        /// </summary>
+        private double TotalSeconds()
+        {
+            return (double)totalSamples / Mp3WaveFormat.SampleRate;
+        }
+
+        /// <summary>
+        /// ID3v2 tag if present
+        /// </summary>
+        // ReSharper disable once InconsistentNaming
+        public Id3v2Tag Id3v2Tag { get; }
+
+        /// <summary>
+        /// ID3v1 tag if present
+        /// </summary>
+        // ReSharper disable once InconsistentNaming
+        public byte[] Id3v1Tag { get; }
+
+        /// <summary>
+        /// Reads the next mp3 frame
+        /// </summary>
+        /// <returns>Next mp3 frame, or null if EOF</returns>
+        public Mp3Frame ReadNextFrame()
+        {
+            var frame = ReadNextFrame(true);
+            if (frame != null) position += frame.SampleCount*bytesPerSample;
+            return frame;
+        }
+
+        /// <summary>
+        /// Reads the next mp3 frame
+        /// </summary>
+        /// <returns>Next mp3 frame, or null if EOF</returns>
+        private Mp3Frame ReadNextFrame(bool readData)
+        {
+            Mp3Frame frame = null;
+            try
+            {
+                frame = Mp3Frame.LoadFromStream(mp3Stream, readData);
+                if (frame != null)
+                {
+                    tocIndex++;
+                }
+            }
+            catch (EndOfStreamException)
+            {
+                // suppress for now - it means we unexpectedly got to the end of the stream
+                // half way through
+            }
+            return frame;
+        }
+
+        /// <summary>
+        /// This is the length in bytes of data available to be read out from the Read method
+        /// (i.e. the decompressed MP3 length)
+        /// n.b. this may return 0 for files whose length is unknown
+        /// </summary>
+        public override long Length => totalSamples * bytesPerSample;
+
+        /// <summary>
+        /// <see cref="WaveStream.WaveFormat"/>
+        /// </summary>
+        public override WaveFormat WaveFormat => waveFormat;
+
+        /// <summary>
+        /// <see cref="Stream.Position"/>
+        /// </summary>
+        public override long Position
+        {
+            get
+            {
+                return position;
+            }
+            set
+            {
+                lock (repositionLock)
+                {
+                    value = Math.Max(Math.Min(value, Length), 0);
+                    var samplePosition = value / bytesPerSample;
+                    Mp3Index mp3Index = null;
+                    for (int index = 0; index < tableOfContents.Count; index++)
+                    {
+                        if (tableOfContents[index].SamplePosition + tableOfContents[index].SampleCount > samplePosition)
+                        {
+                            mp3Index = tableOfContents[index];
+                            tocIndex = index;
+                            break;
+                        }
+                    }
+
+                    decompressBufferOffset = 0;
+                    decompressLeftovers = 0;
+                    repositionedFlag = true;
+
+                    if (mp3Index != null)
+                    {
+                        // perform the reposition
+                        mp3Stream.Position = mp3Index.FilePosition;
+
+                        // set the offset into the buffer (that is yet to be populated in Read())
+                        var frameOffset = samplePosition - mp3Index.SamplePosition;
+                        if (frameOffset > 0)
+                        {
+                            decompressBufferOffset = (int)frameOffset * bytesPerSample;
+                        }
+                    }
+                    else
+                    {
+                        // we are repositioning to the end of the data
+                        mp3Stream.Position = mp3DataLength + dataStartPosition;
+                    }
+
+                    position = value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reads decompressed PCM data from our MP3 file.
+        /// </summary>
+        public override int Read(byte[] sampleBuffer, int offset, int numBytes)
+        {
+            int bytesRead = 0;
+            lock (repositionLock)
+            {
+                if (decompressLeftovers != 0)
+                {
+                    int toCopy = Math.Min(decompressLeftovers, numBytes);
+                    Array.Copy(decompressBuffer, decompressBufferOffset, sampleBuffer, offset, toCopy);
+                    decompressLeftovers -= toCopy;
+                    if (decompressLeftovers == 0)
+                    {
+                        decompressBufferOffset = 0;
+                    }
+                    else
+                    {
+                        decompressBufferOffset += toCopy;
+                    }
+                    bytesRead += toCopy;
+                    offset += toCopy;
+                }
+
+                int targetTocIndex = tocIndex; // the frame index that contains the requested data
+
+                if (repositionedFlag)
+                {
+                    decompressor.Reset();
+
+                    // Seek back a few frames of the stream to get the reset decoder decode a few
+                    // warm-up frames before reading the requested data. Without the warm-up phase,
+                    // the first half of the frame after the reset is attenuated and does not resemble
+                    // the data as it would be when reading sequentially from the beginning, because 
+                    // the decoder is missing the required overlap from the previous frame.
+                    tocIndex = Math.Max(0, tocIndex - 3); // no warm-up at the beginning of the stream
+                    mp3Stream.Position = tableOfContents[tocIndex].FilePosition;
+
+                    repositionedFlag = false;
+                }
+
+                while (bytesRead < numBytes)
+                {
+                    Mp3Frame frame = ReadNextFrame(true); // internal read - should not advance position
+                    if (frame != null)
+                    {
+                        int decompressed = decompressor.DecompressFrame(frame, decompressBuffer, 0);
+
+                        if (tocIndex <= targetTocIndex || decompressed == 0)
+                        {
+                            // The first frame after a reset usually does not immediately yield decoded samples.
+                            // Because the next instructions will fail if a buffer offset is set and the frame 
+                            // decoding didn't return data, we skip the part.
+                            // We skip the following instructions also after decoding a warm-up frame.
+                            continue;
+                        }
+                        // Two special cases can happen here:
+                        // 1. We are interested in the first frame of the stream, but need to read the second frame too
+                        //    for the decoder to return decoded data
+                        // 2. We are interested in the second frame of the stream, but because reading the first frame
+                        //    as warm-up didn't yield any data (because the decoder needs two frames to return data), we
+                        //    get data from the first and second frame. 
+                        //    This case needs special handling, and we have to purge the data of the first frame.
+                        else if (tocIndex == targetTocIndex + 1 && decompressed == bytesPerDecodedFrame * 2)
+                        {
+                            // Purge the first frame's data
+                            Array.Copy(decompressBuffer, bytesPerDecodedFrame, decompressBuffer, 0, bytesPerDecodedFrame);
+                            decompressed = bytesPerDecodedFrame;
+                        }
+
+                        int toCopy = Math.Min(decompressed - decompressBufferOffset, numBytes - bytesRead);
+                        Array.Copy(decompressBuffer, decompressBufferOffset, sampleBuffer, offset, toCopy);
+                        if ((toCopy + decompressBufferOffset) < decompressed)
+                        {
+                            decompressBufferOffset = toCopy + decompressBufferOffset;
+                            decompressLeftovers = decompressed - decompressBufferOffset;
+                        }
+                        else
+                        {
+                            // no lefovers
+                            decompressBufferOffset = 0;
+                            decompressLeftovers = 0;
+                        }
+                        offset += toCopy;
+                        bytesRead += toCopy;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+//            Debug.Assert(bytesRead <= numBytes, "MP3 File Reader read too much");
+            position += bytesRead;
+            return bytesRead;
+        }
+
+        /// <summary>
+        /// Xing header if present
+        /// </summary>
+        public XingHeader XingHeader => xingHeader;
+
+        /// <summary>
+        /// Disposes this WaveStream
+        /// </summary>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (mp3Stream != null)
+                {
+                    if (ownInputStream)
+                    {
+                        mp3Stream.Dispose();
+                    }
+                    mp3Stream = null;
+                }
+                if (decompressor != null)
+                {
+                    decompressor.Dispose();
+                    decompressor = null;
+                }
+            }
+            base.Dispose(disposing);
+        }
+    }*/
 }
