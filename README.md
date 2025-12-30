@@ -38,7 +38,7 @@ There is option controlling the pan.
 
 - After creating the application, go to the **General Information** page and copy the Application (Client) ID. You will need this for configuring the music player application.
 - Add the generated Client ID to the Discord.txt file in the following format: `DiscordClientID:[your_discord_client_id]`
-E.g.: `DiscordClientID:1234567891011121314`
+E.g.: `DiscordClientID:0000000000000000000`
 <p align="center">
   <img src="DiscordRPC2.png?raw=true" />
 </p>
