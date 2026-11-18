@@ -1,8 +1,7 @@
 {
   "profiles": {
     "MusicPlayer": {
-      "commandName": "Project",
-      "workingDirectory": "C:\\Users\\Balogh István\\source\\MusicPlayer\\MusicPlayer\\bin\\Debug\\net6.0-windows"
+      "commandName": "Project"
     }
   }
 }

@@ -39,38 +39,45 @@ namespace MusicPlayer
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            base.OnPaint(e);
+            // Up / down: gain (fill from the centre line), left / right: bandwidth (width of the fill)
+            var t = Theme.Current;
+            var g = e.Graphics;
+            g.Clear(Parent?.BackColor ?? t.Card);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-            StringFormat format = new StringFormat();
-            format.LineAlignment = StringAlignment.Center;
-            format.Alignment = StringAlignment.Center;
-            string barValue = String.Format("{0} Gian", Value);
+            const int textH = 22;
+            var col = new RectangleF(0.5f, textH, Width - 1.5f, Height - 2 * textH);
+            using (var bg = new SolidBrush(t.Field))
+            using (var p = UiIcons.RoundRect(col, 10))
+                g.FillPath(bg, p);
 
-            string bandwidthValue = String.Format("BandW.: \n{0}", BandW);
+            float midY = col.Y + col.Height / 2f;
+            using (var zero = new Pen(Color.FromArgb(70, t.Text), 1f))
+                g.DrawLine(zero, col.X + 6, midY, col.Right - 6, midY);
 
-            int thumbHeight = CalculateThumbHeight();
-            int thumbPosition = CalculateThumbPosition(thumbHeight);
-
-            int thumbWidth = CalculateThumbWidth();
-            int thumbXPosition = CalculateThumbXPosition(thumbWidth);
-
-            //e.Graphics.FillRectangle(Brushes.LightGreen, 1, thumbPosition, this.Width - 2, thumbHeight);
-            //Color thumbColor = Color.FromArgb(128, Color.LightGreen);
-            Color thumbColor = Color.LightGreen;
-            using (SolidBrush brush = new SolidBrush(thumbColor))
+            float bwRatio = (bandW - (bandWmin - 1f)) / (bandWmax - (bandWmin - 1f));
+            float fillW = Math.Max(10f, (col.Width - 8) * bwRatio);
+            float valY = midY - (float)value / Math.Max(1, maximum) * (col.Height / 2f - 4);
+            if (value != 0)
             {
-                //e.Graphics.FillRectangle(brush, 1, thumbPosition, this.Width - 2, thumbHeight);
-                //e.Graphics.FillRectangle(brush, thumbXPosition, thumbPosition, thumbWidth, thumbHeight);
-
-                e.Graphics.FillRectangle(brush, thumbXPosition, thumbPosition, thumbWidth, thumbHeight);
+                var fill = new RectangleF(col.X + (col.Width - fillW) / 2f, Math.Min(midY, valY), fillW, Math.Abs(valY - midY));
+                using var fb = new SolidBrush(Color.FromArgb(200, t.Accent));
+                using var fp = UiIcons.RoundRect(fill, 4);
+                g.FillPath(fb, fp);
             }
+            // handle
+            using (var hb = new SolidBrush(t.Text))
+            using (var hp = UiIcons.RoundRect(new RectangleF(col.X + (col.Width - fillW) / 2f, valY - 3, fillW, 6), 3))
+                g.FillPath(hb, hp);
 
-            e.Graphics.DrawRectangle(Pens.Black, 0, 0, this.Width - 1, this.Height - 1);
-            //e.Graphics.DrawString(barValue, this.Font, Brushes.Black, this.ClientRectangle, format);
-            e.Graphics.DrawString(barValue, new Font(this.Font.FontFamily, 7), Brushes.Black, this.ClientRectangle, format);
-
-            //e.Graphics.DrawRectangle(Pens.Black, 0, 0, this.Width - 1, this.Height - 1);
-            e.Graphics.DrawString(bandwidthValue, new Font(this.Font.FontFamily, 7), Brushes.Black, 20, 180, format);
+            var center = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            using var font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            using var small = new Font("Segoe UI", 8f);
+            using var tb = new SolidBrush(t.Text);
+            using var sb = new SolidBrush(t.SubText);
+            g.DrawString(value > 0 ? $"+{value} dB" : $"{value} dB", font, tb, new RectangleF(0, 0, Width, textH), center);
+            g.DrawString($"BW {bandW:0}", small, sb, new RectangleF(0, Height - textH, Width, textH), center);
         }
 
         private int CalculateThumbWidth()
@@ -152,7 +159,9 @@ namespace MusicPlayer
 
         private void HandleMouseInput(int mouseY)
         {
-            int newValue = (int)((double)mouseY / Height * (minimum - maximum) + maximum);
+            // the column is between the two text rows (22 px each)
+            double f = Math.Clamp((mouseY - 22.0) / Math.Max(1, Height - 44), 0, 1);
+            int newValue = (int)Math.Round(f * (minimum - maximum) + maximum);
             Value = Math.Max(minimum, Math.Min(maximum, newValue));
         }
         private void HandleMouseXInput(int mouseX)
@@ -317,28 +326,35 @@ namespace MusicPlayer
             PanChanged?.Invoke(this, e);
         }
 
+        private const int EdgeW = 16;   // room for the "L" / "R" letters
+        private RectangleF Track => new RectangleF(EdgeW, Height / 2f - 2, Width - 2 * EdgeW, 4);
+
         protected override void OnPaint(PaintEventArgs e)
         {
-            base.OnPaint(e);
+            // balance: L ----|---- R, the fill goes from the centre to the current position
+            var t = Theme.Current;
+            var g = e.Graphics;
+            g.Clear(Parent?.BackColor ?? t.Card);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var tr = Track;
+            using (var b = new SolidBrush(t.Field)) using (var p = UiIcons.RoundRect(tr, 2)) g.FillPath(b, p);
+            float mid = tr.X + tr.Width / 2f;
+            float pos = tr.X + tr.Width * (pan - minimum) / (maximum - minimum);
+            using (var b = new SolidBrush(t.Accent))
+                g.FillRectangle(b, Math.Min(mid, pos), tr.Y, Math.Abs(pos - mid), tr.Height);
+            using (var tick = new Pen(t.SubText, 1f)) g.DrawLine(tick, mid, tr.Y - 4, mid, tr.Bottom + 4);
+            using (var b = new SolidBrush(t.Text)) g.FillEllipse(b, pos - 6, Height / 2f - 6, 12, 12);
+            using var sb = new SolidBrush(t.SubText);
+            using var font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            var c = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            g.DrawString("L", font, sb, new RectangleF(0, 0, EdgeW, Height), c);
+            g.DrawString("R", font, sb, new RectangleF(Width - EdgeW, 0, EdgeW, Height), c);
+        }
 
-            StringFormat format = new StringFormat();
-            format.LineAlignment = StringAlignment.Center;
-            format.Alignment = StringAlignment.Center;
-            string panText = String.Format("{0} pan", Pan);
-
-            int scrollHorzBarWidth = CalculateScrollHorzBarWidth();
-            int scrollPosition = CalculateScrollHorzBarPosition(scrollHorzBarWidth);
-
-            Color scrollColor = Color.LightGreen;
-
-            e.Graphics.FillRectangle(Brushes.Gray, 0, 0, Width, Height); // Teljes háttér
-            using (SolidBrush brush = new SolidBrush(scrollColor))
-            {
-                e.Graphics.FillRectangle(brush, scrollPosition, 0, scrollHorzBarWidth, Height); // Progress bar
-            }
-
-            e.Graphics.DrawString(panText, Font, Brushes.Black, this.ClientRectangle, format);
-            //e.Graphics.DrawString(panText, new Font(this.Font.FontFamily, 7), Brushes.Black, this.ClientRectangle, format);
+        protected override void OnMouseDoubleClick(MouseEventArgs e)
+        {
+            Pan = 0; // double click: centre
+            base.OnMouseDoubleClick(e);
         }
 
         private int CalculateScrollHorzBarWidth()
@@ -389,7 +405,9 @@ namespace MusicPlayer
 
         private void HandleMouseInput(int mouseX)
         {
-            int newValue = (int)((double)mouseX / Width * (maximum - minimum) + minimum);
+            var tr = Track;
+            double f = Math.Clamp((mouseX - tr.X) / tr.Width, 0, 1);
+            int newValue = (int)Math.Round(f * (maximum - minimum) + minimum);
             Pan = Math.Max(minimum, Math.Min(maximum, newValue));
         }
     }
@@ -485,45 +503,43 @@ namespace MusicPlayer
             }
         }
 
+        private const int TimeW = 50;   // elapsed time on the left, total on the right
+        private bool hover;
+        private RectangleF Track => new RectangleF(TimeW, Height / 2f - 2.5f, Width - 2 * TimeW, 5);
+
+        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+
         protected override void OnPaint(PaintEventArgs e)
         {
-            base.OnPaint(e);
+            var t = Theme.Current;
+            var g = e.Graphics;
+            g.Clear(Parent?.BackColor ?? t.Card);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-            int progressBarWidth = CalculateProgressBarWidth();
+            var tr = Track;
+            double ratio = maximum > minimum ? (double)(value - minimum) / (maximum - minimum) : 0;
+            float fx = tr.X + (float)(tr.Width * Math.Clamp(ratio, 0, 1));
+            using (var b = new SolidBrush(t.Field)) using (var p = UiIcons.RoundRect(tr, 2.5f)) g.FillPath(b, p);
+            if (fx > tr.X + 1)
+                using (var b = new SolidBrush(t.Accent)) using (var p = UiIcons.RoundRect(new RectangleF(tr.X, tr.Y, fx - tr.X, tr.Height), 2.5f)) g.FillPath(b, p);
+            float knob = hover || isDragging ? 16 : 12;
+            using (var b = new SolidBrush(hover || isDragging ? t.Text : t.Accent))
+                g.FillEllipse(b, fx - knob / 2, Height / 2f - knob / 2, knob, knob);
 
-            e.Graphics.FillRectangle(Brushes.Gray, 0, 0, Width, Height); // Teljes háttér
-            using (SolidBrush brush = new SolidBrush(progressBarColor))
-            {
-                e.Graphics.FillRectangle(brush, 0, 0, progressBarWidth, Height); // Progress bar
-            }
-
-            //string progressText = $"{FormatTime(currentDuration)} / {FormatTime(totalDuration)}";
-            //string currDur = String.Format("{0:D2}:{0:D2} / {0:D2}:{0:D2}", currentDuration, totalDuration );
-        //    string currDur = String.Format("{0:D2}:{0:D2}", currentDuration );
-            string currDur = $"{FormatTime(currentDuration)} /";
-            string totDur = $"  {FormatTime(totalDuration)}";
-            StringFormat format = new StringFormat();
-            format.LineAlignment = StringAlignment.Center;
-            format.Alignment = StringAlignment.Center;
-            // Az alábbiakban megadhatja az X és Y koordinátákat a pozícionáláshoz
-            float curX = 190; // példaérték, pozíció az X tengelyen
-            float curY = 12; // példaérték, pozíció az Y tengelyen
-            float totX = 230;
-            float totY = 12;
-            e.Graphics.DrawString(currDur, Font, Brushes.Black, curX, curY, format);
-            e.Graphics.DrawString(totDur, Font, Brushes.Black, totX, totY, format);
-        }
-
-        private int CalculateProgressBarWidth()
-        {
-            double ratio = (double)(value - minimum) / (maximum - minimum);
-            return (int)(ratio * Width);
+            using var font = new Font("Segoe UI", 9f);
+            using var sb = new SolidBrush(t.SubText);
+            g.DrawString(FormatTime(currentDuration), font, sb, new RectangleF(0, 0, TimeW - 6, Height),
+                         new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center });
+            g.DrawString(FormatTime(totalDuration), font, sb, new RectangleF(Width - TimeW + 6, 0, TimeW - 6, Height),
+                         new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center });
         }
 
         private string FormatTime(int seconds)
         {
             TimeSpan timeSpan = TimeSpan.FromSeconds(seconds);
-            return $"{timeSpan.Minutes:D2}:{timeSpan.Seconds:D2}";
+            return $"{(int)timeSpan.TotalMinutes:D2}:{timeSpan.Seconds:D2}";
         }
 
         protected override void OnMouseDown(MouseEventArgs e)
@@ -544,8 +560,9 @@ namespace MusicPlayer
 
             if (isDragging && e.Button == MouseButtons.Left)
             {
+                // While dragging only the bar and the time display follow the mouse,
+                // the actual seek happens once, on release (no choppy audio while dragging).
                 HandleMouseInput(e.X);
-                OnPositionChanged(EventArgs.Empty);
             }
         }
 
@@ -555,15 +572,25 @@ namespace MusicPlayer
 
             if (isDragging)
             {
-                isDragging = false;
                 HandleMouseInput(e.X);
+                isDragging = false;
+                OnPositionChanged(EventArgs.Empty); // seek (also for a simple click)
             }
         }
 
+        /// <summary>True while the user drags the position with the mouse.</summary>
+        public bool IsDragging => isDragging;
+
+        /// <summary>The position selected with the mouse, with fractions (not rounded to whole seconds).</summary>
+        public double ExactValue { get; private set; }
+
         private void HandleMouseInput(int mouseX)
         {
-            int newValue = (int)((double)mouseX / Width * (maximum - minimum) + minimum);
-            Value = Math.Max(minimum, Math.Min(maximum, newValue));
+            var tr = Track;
+            double exact = Math.Clamp((mouseX - tr.X) / tr.Width, 0, 1) * (maximum - minimum) + minimum;
+            ExactValue = Math.Max(minimum, Math.Min(maximum, exact));
+            Value = (int)ExactValue;
+            CurrentDuration = Value; // show the selected time while dragging
         }
 
         protected virtual void OnPositionChanged(EventArgs e)

@@ -1,0 +1,18 @@
+# Build output
+bin/
+obj/
+publish/
+.vs/
+*.suo
+*.user.bak
+
+# Backups / local working files
+*.bak
+ui_backup/
+
+# Player data (created next to the exe at run time - personal, never commit)
+myPlaylist.txt
+eqsettings.txt
+theme.txt
+Discord.txt
+LyricsCache/

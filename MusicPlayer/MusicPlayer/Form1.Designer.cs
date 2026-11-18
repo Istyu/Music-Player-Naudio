@@ -32,10 +32,10 @@
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             label1=new Label();
             timer1=new System.Windows.Forms.Timer(components);
-            openAudio=new Button();
-            Play=new Button();
-            pauseButton=new Button();
-            exit=new Button();
+            openAudio=new IconButton();
+            Play=new IconButton();
+            pauseButton=new IconButton();
+            exit=new IconButton();
             band1CustomBar=new CustomScrollbar();
             hz31=new Label();
             band2CustomBar=new CustomScrollbar();
@@ -56,29 +56,29 @@
             hz8K=new Label();
             band10CustomBar=new CustomScrollbar();
             hz16K=new Label();
-            Stop=new Button();
+            Stop=new IconButton();
             customPBarPos=new CustomProgressBar();
             coverBox=new PictureBox();
-            button1=new Button();
+            button1=new IconButton();
             musicList=new ListView();
             columnHeader1=new ColumnHeader();
             columnHeader2=new ColumnHeader();
             columnHeader3=new ColumnHeader();
-            volumeSlider1=new NAudio.Gui.VolumeSlider();
-            volumeMeter1=new NAudio.Gui.VolumeMeter();
-            volumeMeter2=new NAudio.Gui.VolumeMeter();
-            deletePlaylist=new Button();
+            volumeSlider1=new ThemedVolumeSlider();
+            volumeMeter1=new LevelMeter();
+            volumeMeter2=new LevelMeter();
+            deletePlaylist=new IconButton();
             customHorzScrollBar1=new CustomHorzScrollBar();
             horzRollingLabel=new Label();
-            prevSongButton=new Button();
-            nextSongButton=new Button();
+            prevSongButton=new IconButton();
+            nextSongButton=new IconButton();
             artistBox=new TextBox();
             titleBox=new TextBox();
-            getLyricsBtn=new Button();
-            moveSongFWDbtn=new Button();
-            moveSongBWDbtn=new Button();
+            getLyricsBtn=new IconButton();
+            moveSongFWDbtn=new IconButton();
+            moveSongBWDbtn=new IconButton();
             hintLbl=new Label();
-            button2=new Button();
+            button2=new IconButton();
             ((System.ComponentModel.ISupportInitialize)coverBox).BeginInit();
             SuspendLayout();
             // 
@@ -104,7 +104,6 @@
             // openAudio
             // 
             openAudio.BackColor=SystemColors.ActiveBorder;
-            openAudio.BackgroundImage=(Image)resources.GetObject("openAudio.BackgroundImage");
             openAudio.Font=new Font("Times New Roman", 9.75F, FontStyle.Regular, GraphicsUnit.Point);
             openAudio.ForeColor=SystemColors.ActiveCaptionText;
             openAudio.Location=new Point(678, 536);
@@ -120,7 +119,6 @@
             // Play
             // 
             Play.BackColor=SystemColors.ActiveBorder;
-            Play.BackgroundImage=(Image)resources.GetObject("Play.BackgroundImage");
             Play.Enabled=false;
             Play.Font=new Font("Times New Roman", 9.75F, FontStyle.Regular, GraphicsUnit.Point);
             Play.ForeColor=SystemColors.ActiveCaptionText;
@@ -137,7 +135,6 @@
             // pauseButton
             // 
             pauseButton.BackColor=SystemColors.ActiveBorder;
-            pauseButton.BackgroundImage=(Image)resources.GetObject("pauseButton.BackgroundImage");
             pauseButton.Enabled=false;
             pauseButton.Font=new Font("Times New Roman", 9.75F, FontStyle.Regular, GraphicsUnit.Point);
             pauseButton.ForeColor=SystemColors.ActiveCaptionText;
@@ -155,7 +152,6 @@
             // exit
             // 
             exit.BackColor=SystemColors.ControlDark;
-            exit.BackgroundImage=(Image)resources.GetObject("exit.BackgroundImage");
             exit.Font=new Font("Times New Roman", 9.75F, FontStyle.Regular, GraphicsUnit.Point);
             exit.ForeColor=SystemColors.ActiveCaptionText;
             exit.Location=new Point(784, 537);
@@ -451,7 +447,6 @@
             // Stop
             // 
             Stop.BackColor=SystemColors.ActiveBorder;
-            Stop.BackgroundImage=(Image)resources.GetObject("Stop.BackgroundImage");
             Stop.Enabled=false;
             Stop.Font=new Font("Times New Roman", 9.75F, FontStyle.Regular, GraphicsUnit.Point);
             Stop.ForeColor=SystemColors.ActiveCaptionText;
@@ -483,7 +478,6 @@
             // coverBox
             // 
             coverBox.BackColor=Color.Transparent;
-            coverBox.InitialImage=(Image)resources.GetObject("coverBox.InitialImage");
             coverBox.Location=new Point(909, 424);
             coverBox.Name="coverBox";
             coverBox.Size=new Size(250, 160);
@@ -493,7 +487,6 @@
             // button1
             // 
             button1.BackColor=SystemColors.ActiveBorder;
-            button1.BackgroundImage=(Image)resources.GetObject("button1.BackgroundImage");
             button1.Font=new Font("Times New Roman", 9.75F, FontStyle.Regular, GraphicsUnit.Point);
             button1.ForeColor=SystemColors.ActiveCaptionText;
             button1.Location=new Point(409, 536);
@@ -568,7 +561,6 @@
             // deletePlaylist
             // 
             deletePlaylist.BackColor=SystemColors.ActiveBorder;
-            deletePlaylist.BackgroundImage=(Image)resources.GetObject("deletePlaylist.BackgroundImage");
             deletePlaylist.Font=new Font("Times New Roman", 9.75F, FontStyle.Regular, GraphicsUnit.Point);
             deletePlaylist.ForeColor=SystemColors.ActiveCaptionText;
             deletePlaylist.Location=new Point(356, 536);
@@ -604,7 +596,6 @@
             // prevSongButton
             // 
             prevSongButton.BackColor=SystemColors.ActiveBorder;
-            prevSongButton.BackgroundImage=(Image)resources.GetObject("prevSongButton.BackgroundImage");
             prevSongButton.Font=new Font("Times New Roman", 9.75F, FontStyle.Regular, GraphicsUnit.Point);
             prevSongButton.ForeColor=SystemColors.ActiveCaptionText;
             prevSongButton.Location=new Point(516, 536);
@@ -620,7 +611,6 @@
             // nextSongButton
             // 
             nextSongButton.BackColor=SystemColors.ActiveBorder;
-            nextSongButton.BackgroundImage=(Image)resources.GetObject("nextSongButton.BackgroundImage");
             nextSongButton.Font=new Font("Times New Roman", 9.75F, FontStyle.Regular, GraphicsUnit.Point);
             nextSongButton.ForeColor=SystemColors.ActiveCaptionText;
             nextSongButton.Location=new Point(624, 536);
@@ -663,7 +653,6 @@
             // moveSongFWDbtn
             // 
             moveSongFWDbtn.BackColor=SystemColors.ActiveBorder;
-            moveSongFWDbtn.BackgroundImage=(Image)resources.GetObject("moveSongFWDbtn.BackgroundImage");
             moveSongFWDbtn.ForeColor=SystemColors.ActiveCaptionText;
             moveSongFWDbtn.Location=new Point(24, 314);
             moveSongFWDbtn.Name="moveSongFWDbtn";
@@ -677,7 +666,6 @@
             // moveSongBWDbtn
             // 
             moveSongBWDbtn.BackColor=SystemColors.ActiveBorder;
-            moveSongBWDbtn.BackgroundImage=(Image)resources.GetObject("moveSongBWDbtn.BackgroundImage");
             moveSongBWDbtn.ForeColor=SystemColors.ActiveCaptionText;
             moveSongBWDbtn.Location=new Point(24, 18);
             moveSongBWDbtn.Name="moveSongBWDbtn";
@@ -702,7 +690,6 @@
             // button2
             // 
             button2.BackColor=SystemColors.ActiveBorder;
-            button2.BackgroundImage=(Image)resources.GetObject("button2.BackgroundImage");
             button2.Font=new Font("Times New Roman", 9.75F, FontStyle.Regular, GraphicsUnit.Point);
             button2.ForeColor=SystemColors.ActiveCaptionText;
             button2.Location=new Point(731, 536);
@@ -719,7 +706,6 @@
             AutoScaleDimensions=new SizeF(9F, 19F);
             AutoScaleMode=AutoScaleMode.Font;
             BackColor=SystemColors.GrayText;
-            BackgroundImage=(Image)resources.GetObject("$this.BackgroundImage");
             BackgroundImageLayout=ImageLayout.Stretch;
             ClientSize=new Size(1184, 641);
             Controls.Add(button2);
@@ -818,9 +804,9 @@
         private ColumnHeader columnHeader1;
         private ColumnHeader columnHeader2;
         private ColumnHeader columnHeader3;
-        private NAudio.Gui.VolumeSlider volumeSlider1;
-        private NAudio.Gui.VolumeMeter volumeMeter1;
-        private NAudio.Gui.VolumeMeter volumeMeter2;
+        private ThemedVolumeSlider volumeSlider1;
+        private LevelMeter volumeMeter1;
+        private LevelMeter volumeMeter2;
         private Button deletePlaylist;
         private CustomHorzScrollBar customHorzScrollBar1;
         private Label horzRollingLabel;
@@ -835,4 +821,4 @@
         private Button button2;
         //private TrackBar Band1;
     }
-}
+}
