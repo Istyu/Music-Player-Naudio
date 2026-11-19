@@ -16,10 +16,12 @@ selectable color themes and Discord Rich Presence.
 - Smooth fade in / fade out on Play and Pause (no clicks, no "blip" after pausing).
 - Click-free seeking: click or drag the progress bar, the position changes once on release.
 - Automatically continues with the next song; at the end of the playlist it stops and goes back to the start of the song.
-- Volume slider (dB scale, mouse wheel works too, click the speaker icon to mute) and balance (double click = centre).
+- Volume slider (dB scale, mouse wheel works too, click the speaker icon to mute) and balance (double click = centre),
+  both done inside the audio chain (the Windows volume mixer is not changed).
 - Stereo level meter (L / R) with peak hold.
 - Taskbar button shows the progress: green while playing, yellow when paused, plus a play / pause overlay icon.
-- Files with uncommon sample rates are converted to 44.1 kHz automatically (see *Sample Rate Conversion* below).
+- VBR (variable bitrate) MP3s are supported; files with uncommon sample rates are converted to 44.1 kHz automatically,
+  and MP3s with stray frames of another format (e.g. garbage after the song) still play (see *VBR and damaged MP3 files* below).
 
 ### Playlist
 - Every song is shown with its album cover (loaded in the background), artist and length; the current song is highlighted.
@@ -107,6 +109,7 @@ To move your settings to another PC, copy these next to the exe there.
 - Song end is detected from the audio itself, so converted (resampled) files continue with the next song too, and the end of a song is not cut off.
 - Fixed: the player could get stuck after the last song of the playlist; unsaved EQ changes were lost on song change; the playlist was not saved on a fresh install; `eqsettings.txt` depended on the Windows number format.
 - `build.cmd` / `publish.cmd` for building without Visual Studio, including a self-contained single-exe release.
+- MP3 files with stray frames of another format play instead of failing; balance moved into the audio chain.
 
 ### Discord Rich Presence
 
@@ -157,7 +160,19 @@ The new version now supports sample rate conversion for files that do not use th
 - Error handling is included to manage potential file processing errors.
 
 This makes the application more stable and flexible when handling different audio formats.
-Variable sample rate tracks are still not supported.
+
+### VBR and damaged MP3 files
+
+- **VBR (variable bitrate) MP3 files are fully supported**: length, seeking and the end of the song are exact.
+- MP3 files that contain stray "frames" in another format no longer fail to open (*"Mp3FileReader does not support sample rate changes"*).
+  This is usually garbage after the song (an appended picture, a damaged tag) where a random byte pattern looks like a frame.
+  Such frames are now skipped: the format of the song is the one most frames have, and only those frames are played.
+- Normal files are opened exactly as before (the fallback runs only when the normal open fails).
+
+### Balance
+
+- The balance (L / R) is now done in the audio chain instead of changing the Windows volume of the left / right channel.
+- No side effects on the Windows volume mixer, smooth (no crackle while moving the slider), and the level meter shows the balanced signal.
 
 ## Installed packages
 
